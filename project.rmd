@@ -1,0 +1,19 @@
+---
+title: "Romania Weather during 2012-2021"
+author:
+- name: _Anastasiu Catalin-Gabriel (Gr 111)_
+- name: _Aslantas Serdal (Gr 511)_
+date: "_`r format(Sys.time(), '%d %B %Y')`_"
+output: 
+  html_document:
+    highlight: pygments
+    
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(include = TRUE, echo = TRUE, warning = FALSE)
+```
+
+## **1. Chapter 1** 
+
+### **1.1 Subchapter**
