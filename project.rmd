@@ -1,8 +1,8 @@
 ---
-title: "Romania Weather during 2012-2021"
+title: "EDA: Romanian Weather during 2011 - 2021"
 author:
-- name: _Anastasiu Catalin-Gabriel (Gr 111)_
-- name: _Aslantas Serdal (Gr 511)_
+- name: _Catalin-Gabriel Anastasiu (Gr 511)_
+- name: _Serdal Aslantas (Gr 511)_
 date: "_`r format(Sys.time(), '%d %B %Y')`_"
 output: 
   html_document:
@@ -14,6 +14,61 @@ output:
 knitr::opts_chunk$set(include = TRUE, echo = TRUE, warning = FALSE)
 ```
 
-## **1. Chapter 1** 
+## **1. The Data Set** 
 
-### **1.1 Subchapter**
+### **1.1 Procuring the data**
+
+In order to study the ways in which our country's weather has behaved in the
+past years, we decided to look for a data set on different sources from the
+Internet. Unfortunately, we have not found any data set containing the metrics
+we need, therefore we decided to use a public API which would give us the
+weather conditions in Romania in a set of locations and time periods we chose to
+specify.
+
+The period of time has been set to a daily basis from Jan 1st 2011, until Dec
+31st 2021. This choice has been made due to financial limitations we encountered
+on the API's part. In case that we had wanted to procure more data, more
+requests would have been necessary to be made to the public API, exceeding the
+threshold of free requests.
+
+For each request, the API will return a single *.csv* file, respecting the name
+convention "weather_YEAR_COUNTY.csv". So, for 41 Romanian counties and 11 years,
+we would obtain 451 csv files. However, we need to work with a single data set,
+so we decided to merge all of them into a single one in the code block below.
+
+```{r}
+library(tidyverse)
+
+# TRUE only at first when "weather_2011-2021_Romania.csv" is not present in our project
+MERGE_ALL_DATASETS = TRUE
+
+if (MERGE_ALL_DATASETS) {
+  
+  filenames_list = list.files(
+    path = "../weather_data/",
+    pattern = "*.csv",
+    full.names = TRUE
+  )
+  
+  data = lapply(filenames_list, read_csv) %>% bind_rows()
+  
+  write.csv(data, "weather_2011-2021_Romania.csv", row.names = FALSE, na = "")
+} 
+
+data = read_csv("weather_2011-2021_Romania.csv", show_col_types = FALSE)
+```
+
+### **1.2 The data set's columns**
+
+***TODO:*** Describe the meaning of each relevant column using [this documentation](https://www.visualcrossing.com/resources/documentation/weather-data/weather-data-documentation/)
+
+## **2. EDA Chapter**
+
+
+## **3. EDA Chapter **
+
+
+## **4. EDA Chapter **
+
+
+## **N. EDA Chapter **
