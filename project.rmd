@@ -38,6 +38,7 @@ so we decided to merge all of them into a single one in the code block below.
 
 ```{r}
 library(tidyverse)
+library(ggplot2)
 
 # TRUE only at first when "weather_2011-2021_Romania.csv" is not present in our project
 MERGE_ALL_DATASETS = FALSE
@@ -239,7 +240,19 @@ data %>%
 ```
 
 ## **3. EDA Chapter **
-
+```{r}
+gplot(data, aes(x=Latitude, y=Longitude)) + 
+     geom_point(color="orange",
+         fill="#69b3a2",
+         shape=21,
+         alpha=0.5,
+         size=6,
+         stroke = 2)+geom_text(
+     label=rownames(data), 
+     nudge_x = 0.25, nudge_y = 0.25, 
+     check_overlap = T
+   )
+```
 
 ## **4. EDA Chapter **
 
