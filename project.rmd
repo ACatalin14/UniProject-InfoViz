@@ -238,7 +238,71 @@ data %>%
   select(c(Address, CountySeat, County))
 ```
 
-## **3. EDA Chapter **
+## **3. Breaking down the Weather**
+
+### **3.1. Exploring the Temperatures**
+
+<!-- This chapter is for Min Temp, Max Temp, Temp columns (3)
++ DateTime/Counties -->
+
+
+### **3.2. Exploring the Humidity**
+
+<!-- This chapter is for Dew point, Relative Humid, Heat Index columns (3)
++ DateTime/Counties -->
+
+
+### **3.3. Exploring the Winds**
+
+<!-- This chapter is for Wind Speed, Wind Gust, Wind Direction, Wind Chill,
+Wind Cardinal Direction columns (5) + DateTime/Counties -->
+
+
+### **3.4. Exploring the Precipitations and their effects**
+
+<!-- This chapter is for Precip, Precip Cover, Snow Depth, Cloud Cover,
+Visibility, Visibility Level, Sea level pressure columns (7) + DateTime/Counties
+
+We can mention something like:
+
+Maps of sea-level isobars help weather forecasters quickly spot areas of low
+and high pressure, which can help them identify areas of potentially stormy
+weather.
+-->
+
+
+### **3.5. Exploring the Weather Types**
+
+<!-- This chapter is for all 37 weather types columns and relationships
+between them + DateTime/Counties -->
+
+
+## **4. Making sense of the Weather**
+
+<!-- Here we will show relationships between all separated elements from above -->
+
+
+### **4.1. Surface connections**
+
+<!-- Correlation matrix between the main columns. Or between ALL of them.
+Surprising results? Maybe new chapters from this? -->
+
+
+### **4.2. Showcasing Weather Types by Temperature**
+
+
+### **4.3. The links between Temperature and Humidity**
+
+
+### **4.4. How powerful are Romania's storms?**
+
+<!-- Look into links between Wind and Precipitations' many columns  -->
+
+
+## **5. Conclusions**
+
+
+# **What to do with this peace of code?**
 ```{r}
 small_data = data %>% group_by(Address) %>% filter(row_number() == 1)
 ggplot(small_data, aes(x=Latitude, y=Longitude)) + 
@@ -253,8 +317,3 @@ ggplot(small_data, aes(x=Latitude, y=Longitude)) +
      check_overlap = T
    )
 ```
-
-## **4. EDA Chapter **
-
-
-## **N. EDA Chapter **
