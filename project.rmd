@@ -21,9 +21,9 @@ knitr::opts_chunk$set(include = TRUE, echo = TRUE, warning = FALSE)
 In order to study the ways in which our country's weather has behaved in the
 past years, we decided to look for a data set on different sources from the
 Internet. Unfortunately, we have not found any data set containing the metrics
-we need, therefore we decided to use a public API which would give us the
-weather conditions in Romania in a set of locations and time periods we chose to
-specify.
+we need, therefore we decided to use the *Visual Crossing Weather API*, which
+would give us the weather conditions in Romania in a set of locations and
+time periods we chose to specify.
 
 The period of time has been set to a daily basis from Jan 1st 2011, until Dec
 31st 2021. This choice has been made due to financial limitations we encountered
@@ -36,9 +36,10 @@ convention **weather_YEAR_COUNTY.csv**. So, for 41 Romanian counties and 11 year
 we would obtain 451 csv files. However, we need to work with a single data set,
 so we decided to merge all of them into a single one in the code block below.
 
-```{r}
+```{r dataset-creation}
 library(tidyverse)
 library(ggplot2)
+library(plotly)
 
 # TRUE only at first when "weather_2011-2021_Romania.csv" is not present in our project
 MERGE_ALL_DATASETS = FALSE
@@ -57,6 +58,7 @@ if (MERGE_ALL_DATASETS) {
 } 
 
 data = read_csv("weather_2011-2021_Romania.csv", show_col_types = FALSE)
+rm(MERGE_ALL_DATASETS)
 ```
 
 ### **1.2. The data set's columns**
@@ -78,25 +80,26 @@ Romanian weather.
 
 We start by removing blank spaces from column names for easier writing of the R
 code (e.g. "Minimum Temperature" becomes "MinimumTemperature").
-```{r}
+```{r remove-blank-spaces}
 names(data) = gsub(' ', '', names(data))
 ```
 
 
-### **2.1. Splitting the Weather Type column**
+### **2.1. Splitting the Weather Type & Conditions columns**
 
-The data set contains a column named *Weather Type* that contains a string of
-different conditions identified at a specific time and location, each condition
-being separated by a comma. However, there can be multiple conditions reported
-in a day, so we decided that, instead of having a single column describing all
-of the conditions, we could create a separate column for each weather type.
+The data set contains two columns named *Weather Type* and *Conditions* that
+contain strings of different weather conditions identified at a specific time and
+location, each condition being separated by a comma. However, there can be
+multiple conditions reported in a day, so we decided that, instead of having a
+single column describing all of the conditions, we could create a separate
+column for each weather type and condition.
 
 As a result, all of these new columns will be of boolean type, describing
 whether the weather has been or not identified in the given condition. There
-are 37 possible weather types in the data set, therefore 37 new columns will be
-created.
+are 37 possible weather types and 4 possible conditions in the data set,
+therefore 41 new columns will be created.
 
-```{r}
+```{r compute-weather-type-columns}
 accumulate_weather_func = function(accumulated_types, weather) {
   if (!is.na(weather)) {
     conditions = strsplit(weather, ", ")[[1]]
@@ -113,7 +116,8 @@ cat("Number of possible weather types:", length(weather_types))
 
 # Create the weather type columns
 for (weather_type in weather_types) {
-  column_name = gsub('[ /]', '', weather_type)  # remove spaces and slashes
+  column_name = gsub(' ', '', weather_type)  # remove spaces
+  column_name = gsub('/', 'Or', column_name)  # replace slashes with Or
   
   data[[column_name]] = with(
     data, 
@@ -131,12 +135,52 @@ for (weather_type in weather_types) {
   )
 }
 
+rm(column_name, weather_type)
+
 # Display an example of some weather columns
 data %>%
   slice(42:46) %>%
   select(c(WeatherType, Fog, LightRain, SnowShowers, Duststorm))
 ```
 
+
+```{r compute-condition-columns}
+# Compute the list of possible conditions in this data set
+conditions = reduce(data$Conditions, accumulate_weather_func, .init = c())
+
+cat("Number of possible conditions:", length(conditions))
+
+# Create the conditions columns
+for (condition in conditions) {
+  column_name = paste0("Condition", condition)
+  
+  if (condition == "Partially cloudy") {
+    column_name = "ConditionPartiallyCloudy"
+  }
+  
+  data[[column_name]] = with(
+    data, 
+    # If Condition is NA, then new column will contain NA as well
+    if_else(
+      is.na(Conditions),
+      NA,
+      # If Condition is defined, check that condition is present => set TRUE/FALSE
+      if_else(
+        grepl(condition, Conditions, fixed = TRUE),
+        TRUE,
+        FALSE
+      )
+    )
+  )
+}
+
+rm(column_name, condition)
+
+# Display an example of the conditions columns
+data %>%
+  slice(11:15) %>%
+  select(c(Conditions, ConditionClear, ConditionPartiallyCloudy, ConditionOvercast, ConditionRain))
+```
 
 ### **2.2. Categorizing the Wind Direction**
 
@@ -146,7 +190,7 @@ under a categorical form, by assigning a named direction for each specific
 division on the trigonometric circle. In this way, we can obtain 16 different
 categories for 16 subdivisions, as can be checked in the figure below.
 
-```{r}
+```{r compute-wind-table}
 wind_direction_table = data.frame(
   "Cardinal_Point" = c("N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"),
   "From" = c(348.75, seq(11.25, 326.25, 22.5)),
@@ -159,7 +203,7 @@ wind_direction_table = data.frame(
 Using the above table, we can take each value from the *WindDirection* column
 and build the new column *WindCardinalDirection*.
 
-```{r}
+```{r compute-wind-cardinal-direction-column}
 # Break down the numeric direction into more categories
 data = data %>%
   mutate(
@@ -194,7 +238,7 @@ The 4 divisions are described as being the following:
 - **Moderate** - 2 to 5 nautical miles (3.704 Km - 9.26 Km)
 - **Good** - Greater than 5 nautical miles (> 9.26 Km)
 
-```{r}
+```{r compute-visibility-level-column}
 data = data %>%
   mutate(
     VisibilityLevel = cut(
@@ -218,7 +262,7 @@ followed by **, Romania**, but we would like to have a column called *County*
 that contains only the name of the county (not the county seat) to use while
 plotting the Romania's map.
 
-```{r}
+```{r compute-county-column}
 romania_counties = c("Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani","Brasov","Braila","Bucharest","Buzau","Caras-Severin","Calarasi","Cluj","Constanta","Covasna","Dambovita","Dolj","Galati","Giurgiu","Gorj","Harghita","Hunedoara","Ialomita","Iasi","Maramures","Mehedinti","Mures","Neamt","Olt","Prahova","Satu Mare","Salaj","Sibiu","Suceava","Teleorman","Timis","Tulcea","Vaslui","Valcea","Vrancea")
 romania_county_seats = c("Alba Iulia","Arad","Pitesti","Bacau","Oradea","Bistrita","Botosani","Brasov","Braila","Bucharest","Buzau","Resita","Calarasi","Cluj-Napoca","Constanta","Sfantu Gheorghe","Targoviste","Craiova","Galati","Giurgiu","Targu Jiu","Miercurea Ciuc","Deva","Slobozia","Iasi","Baia Mare","Drobeta-Turnu Severin","Targu Mures","Piatra Neamt","Slatina","Ploiesti","Satu Mare","Zalau","Sibiu","Suceava","Alexandria","Timisoara","Tulcea","Vaslui","Ramnicu Valcea","Focsani")
 
@@ -240,15 +284,137 @@ data %>%
 
 ## **3. Breaking down the Weather**
 
-### **3.1. Exploring the Temperatures**
+### **3.1. Exploring the Weather Types**
+
+First we define the data set portion that we are going to use in this analysis.
+
+```{r select-weather-types-columns}
+# Select relevant columns for this analysis.
+data_wt_cond = data %>% 
+  select(
+    "Datetime", "County", "Latitude", "Longitude",
+     "Mist":"HeavyFreezingRain",
+     "ConditionPartiallyCloudy":"ConditionRain"
+    )
+wt_cols = 5:41
+cond_cols = 42:45
+```
+
+#### **3.1.1. Unusual Weather Types**
+
+There is a wide variety of weather types that can be identified in Romania
+during the years' four seasons. We have identified 37 special ones, as labeled
+by the *Visual Crossing Weather API*, but what is the most common unusual
+weather in Romania? We could first take a look at the extact number of
+occurrences for each weather type.
+
+```{r weather-types-plot-1, fig.width = 9, fig.height = 7, fig.align = 'center'}
+# Create data frame for the first plot
+data_wt_cond_1 = data_wt_cond %>%
+  summarise(across(all_of(wt_cols), sum, na.rm = TRUE)) %>%
+  gather(key = "WeatherType", value = "Occurrences") %>%
+  arrange(Occurrences) %>%
+  mutate(WeatherType = factor(WeatherType, WeatherType))
+
+total_occurrences = (data_wt_cond_1 %>% summarise(sum(Occurrences)))[[1]]
+
+data_wt_cond_1 = data_wt_cond_1 %>%
+  mutate(OccurrencesFreq = round(Occurrences / total_occurrences * 100, 3))
+
+# Define text label function
+get_occ_text = function(type_col, occ_col, occ_freq_col) {
+  texts = list()
+  
+  for (i in 1:length(occ_col)) {
+    text = paste0(
+      "Weather: ", type_col[i], "\n",
+      occ_freq_col[i], "% of Unusual Weather\n",
+      occ_col[i], " observed occurrences"
+    )
+    texts = append(texts, text)
+  }
+  return(texts)
+}
+
+plot_wt_cond_1 = data_wt_cond_1 %>%
+  ggplot(aes(
+    x = WeatherType,
+    y = OccurrencesFreq,
+    text = get_occ_text(WeatherType, Occurrences, OccurrencesFreq)
+  )) +
+  geom_segment(
+    aes(x = WeatherType, xend = WeatherType, y = 0, yend = OccurrencesFreq),
+    color = "#82a3e0",
+    alpha = 1
+  ) +
+  geom_point(color="#82a3e0", size=2, alpha=1) +
+  coord_flip() +
+  labs(
+    title = "Frequency of Unusual Weather Conditions in Romania (Counts)",
+    x = "",
+    y = "% of unusual weather occurrences"
+  )
+
+rm(data_wt_cond_1, total_occurrences)
+
+ggplotly(plot_wt_cond_1, tooltip = "text")
+```
+
+
+The lollipop plot from above tells us that the *Mist* weather has the biggest
+amount of occurrences during 2011-2021 when summing up all the Romania's
+counties. This might be explained by the counties found in the Carpathian
+Mountains where this type of weather is usually more manifested, together
+with *Rain*, *Fog*, and *Snow*.
+
+<!-- Idea: Plot most unusual weather in each county on Romania's map -->
+
+#### **3.1.2. Other Weather Conditions**
+
+Here we look into the 4 conditions the data set has to offer. In the pie chart
+below you can see the overall distribution of the weather conditions in the
+entire period among all the Romania's counties, and it looks like the most
+part of the weather is *Partially Cloudy*.
+
+```{r weather-types-plot-2, fig.width = 7, fig.height = 7, fig.align = 'center'}
+data_wt_cond_2 = data_wt_cond %>%
+  summarise(across(all_of(cond_cols), sum, na.rm = TRUE)) %>%
+  gather(key = "Condition", value = "Occurrences") %>%
+  arrange(desc(Occurrences)) %>%
+  mutate(Condition = factor(Condition, Condition)) %>%
+  mutate(ypos = cumsum(Occurrences) - 0.5 * Occurrences )
+
+total_occurrences = (data_wt_cond_2 %>% summarise(sum(Occurrences)))[[1]]
+
+data_wt_cond_2 = data_wt_cond_2 %>%
+  mutate(OccurrencesFreq = round(Occurrences / total_occurrences * 100, 2))
+
+plot_wt_cond_2 = data_wt_cond_2 %>%
+  ggplot(aes(x = "", y = Occurrences, fill = Condition)) +
+  geom_bar(stat = "identity", width = 1, color="white") +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Distribution of registered Sky Conditions") +
+  scale_fill_manual(
+    values = c("#0c9fc7", "#041b8f", "#02d7e3", "#363e66"),
+    labels = c("Partially Cloudy", "Rain", "Clear", "Overcast")
+  ) +
+  geom_text(
+    aes(y = total_occurrences - ypos, label = paste0(OccurrencesFreq, "%")),
+    color = "white",
+    size = 6
+  )
+
+rm(data_wt_cond_2, data_wt_cond)
+
+plot_wt_cond_2
+```
+
+
+### **3.2. Exploring the Temperatures**
 
 <!-- This chapter is for Min Temp, Max Temp, Temp columns (3)
-+ DateTime/Counties -->
-
-
-### **3.2. Exploring the Humidity**
-
-<!-- This chapter is for Dew point, Relative Humid, Heat Index columns (3)
 + DateTime/Counties -->
 
 
@@ -258,23 +424,24 @@ data %>%
 Wind Cardinal Direction columns (5) + DateTime/Counties -->
 
 
-### **3.4. Exploring the Precipitations and their effects**
+### **3.4. Exploring the Humidity**
+
+<!-- This chapter is for Dew point, Relative Humid, Heat Index columns (3)
++ DateTime/Counties -->
+
+
+### **3.5. Exploring the Precipitations and their effects**
 
 <!-- This chapter is for Precip, Precip Cover, Snow Depth, Cloud Cover,
 Visibility, Visibility Level, Sea level pressure columns (7) + DateTime/Counties
 
-We can mention something like:
+Why sea level pressure is relevant to precipitations? Taken from Google:
 
 Maps of sea-level isobars help weather forecasters quickly spot areas of low
 and high pressure, which can help them identify areas of potentially stormy
 weather.
 -->
 
-
-### **3.5. Exploring the Weather Types**
-
-<!-- This chapter is for all 37 weather types columns and relationships
-between them + DateTime/Counties -->
 
 
 ## **4. Making sense of the Weather**
@@ -285,7 +452,7 @@ between them + DateTime/Counties -->
 ### **4.1. Surface connections**
 
 <!-- Correlation matrix between the main columns. Or between ALL of them.
-Surprising results? Maybe new chapters from this? -->
+Surprising results? Maybe new chapters from there? -->
 
 
 ### **4.2. Showcasing Weather Types by Temperature**
