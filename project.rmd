@@ -79,9 +79,11 @@ and open multiple questions with possibly more surprising insights in the
 Romanian weather.
 
 We start by removing blank spaces from column names for easier writing of the R
-code (e.g. "Minimum Temperature" becomes "MinimumTemperature").
-```{r remove-blank-spaces}
+code (e.g. "Minimum Temperature" becomes "MinimumTemperature") and redundant
+columns *ResolvedAddress* and *Name*.
+```{r remove-blank-spaces-and-columns}
 names(data) = gsub(' ', '', names(data))
+data = data %>% select(-c("ResolvedAddress", "Name"))
 ```
 
 
@@ -198,7 +200,7 @@ wind_direction_table = data.frame(
 )
 ```
 
-![](./images/wind_directions.png)
+![Table for Wind Cardinal Directions and Degrees](./images/wind_directions.png)
 
 Using the above table, we can take each value from the *WindDirection* column
 and build the new column *WindCardinalDirection*.
@@ -255,31 +257,69 @@ data %>%
   select(c(Visibility, VisibilityLevel))
 ```
 
-### **2.4. Rewriting the County names**
+### **2.4. Clean the Counties**
+
+#### **2.4.1. Rewriting the County names**
 
 The column *Address* contains the name of each county seat in our country,
 followed by **, Romania**, but we would like to have a column called *County*
 that contains only the name of the county (not the county seat) to use while
-plotting the Romania's map.
+plotting the Romania's map. It is important that the county names computed here
+to be the same as the ones employed in the *geoJson* file containing data about
+drawing the counties' borders (e.g. must rename *Bucharest* to *Bucuresti*). 
 
 ```{r compute-county-column}
-romania_counties = c("Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani","Brasov","Braila","Bucharest","Buzau","Caras-Severin","Calarasi","Cluj","Constanta","Covasna","Dambovita","Dolj","Galati","Giurgiu","Gorj","Harghita","Hunedoara","Ialomita","Iasi","Maramures","Mehedinti","Mures","Neamt","Olt","Prahova","Satu Mare","Salaj","Sibiu","Suceava","Teleorman","Timis","Tulcea","Vaslui","Valcea","Vrancea")
-romania_county_seats = c("Alba Iulia","Arad","Pitesti","Bacau","Oradea","Bistrita","Botosani","Brasov","Braila","Bucharest","Buzau","Resita","Calarasi","Cluj-Napoca","Constanta","Sfantu Gheorghe","Targoviste","Craiova","Galati","Giurgiu","Targu Jiu","Miercurea Ciuc","Deva","Slobozia","Iasi","Baia Mare","Drobeta-Turnu Severin","Targu Mures","Piatra Neamt","Slatina","Ploiesti","Satu Mare","Zalau","Sibiu","Suceava","Alexandria","Timisoara","Tulcea","Vaslui","Ramnicu Valcea","Focsani")
+romania_counties = c("Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani","Brasov","Braila","Bucuresti","Buzau","Caras-Severin","Calarasi","Cluj","Constanta","Covasna","Dambovita","Dolj","Galati","Giurgiu","Gorj","Harghita","Hunedoara","Ialomita","Iasi","Maramures","Mehedinti","Mures","Neamt","Olt","Prahova","Satu Mare","Salaj","Sibiu","Suceava","Teleorman","Timis","Tulcea","Vaslui","Valcea","Vrancea")
+romania_county_seats = c("Alba Iulia","Arad","Pitesti","Bacau","Oradea","Bistrita","Botosani","Brasov","Braila","Bucuresti","Buzau","Resita","Calarasi","Cluj-Napoca","Constanta","Sfantu Gheorghe","Targoviste","Craiova","Galati","Giurgiu","Targu Jiu","Miercurea Ciuc","Deva","Slobozia","Iasi","Baia Mare","Drobeta-Turnu Severin","Targu Mures","Piatra Neamt","Slatina","Ploiesti","Satu Mare","Zalau","Sibiu","Suceava","Alexandria","Timisoara","Tulcea","Vaslui","Ramnicu Valcea","Focsani")
 
-# First create a column CountySeat and then, based on the above lists, create
-# the final column County
+# First create a column CountySeat, translate the special Bucharest case,
+# and then, based on the above lists, create the final column County
 data = data %>%
   mutate(CountySeat = gsub(', Romania', '', Address)) %>%
-  mutate(County = plyr::mapvalues(
-    x = CountySeat,
-    from = romania_county_seats,
-    to = romania_counties
-  ))
+  mutate(
+    CountySeat = ifelse(
+      CountySeat == "Bucharest",
+      "Bucuresti",
+      CountySeat
+    )
+  ) %>%
+  mutate(
+    County = plyr::mapvalues(
+      x = CountySeat,
+      from = romania_county_seats,
+      to = romania_counties
+    )
+  )
 
 # Display an example of several counties
 data %>%
   slice_sample(n=5) %>%
   select(c(Address, CountySeat, County))
+```
+
+#### **2.4.2. Complete Ilfov's weather**
+
+We were not sure what the API will return when calling it to get Ilfov's
+weather (might have returned Bucharest's weather, which is inside it), so we
+decided to pass this county's API calls in order to allow for other free calls
+for other counties. 
+
+In this project we will suppose that Ilfov and Bucharest share the same weather.
+
+```{r add-ilfov-data}
+ilfov_data = data %>%
+  filter(County == "Bucuresti") %>%
+  mutate(
+    Address = "Ilfov, Romania",
+    County = "Ilfov",
+    CountySeat = "Bucuresti",
+    Latitude = 44.5355,
+    Longitude = 26.2324
+  )
+
+data = rbind(data, ilfov_data)
+
+rm(ilfov_data)
 ```
 
 ## **3. Breaking down the Weather**
@@ -350,7 +390,7 @@ plot_wt_cond_1 = data_wt_cond_1 %>%
   geom_point(color="#82a3e0", size=2, alpha=1) +
   coord_flip() +
   labs(
-    title = "Frequency of Unusual Weather Conditions in Romania (Counts)",
+    title = "Frequency of Unusual Weather Conditions in Romania",
     x = "",
     y = "% of unusual weather occurrences"
   )
@@ -368,6 +408,58 @@ Mountains where this type of weather is usually more manifested, together
 with *Rain*, *Fog*, and *Snow*.
 
 <!-- Idea: Plot most unusual weather in each county on Romania's map -->
+In order to confirm this hypothesis, we decided to plot the most unusual weather
+for each county and check the results in the following map.
+
+```{r weather-types-plot-2, fig.width = 10, fig.height = 7, fig.align = 'center'}
+library(geojsonio)
+library(broom)
+
+romania_df = geojson_read("romania.geojson", what = "sp")
+romania_map = tidy(romania_df, region = "name")
+
+data_wt_cond_2 = data_wt_cond %>%
+  select(c(County, all_of(wt_cols))) %>%
+  group_by(County) %>%
+  summarise(across(1:37, sum, na.rm = TRUE)) %>%
+  gather(key = "WeatherType", value = "Occurrences", -County) %>%
+  group_by(County) %>%
+  filter(Occurrences == max(Occurrences)) %>%
+  mutate(WeatherType = factor(WeatherType, WeatherType)) %>%
+  select(-Occurrences) %>%
+  ungroup()
+
+map_wt_cond_2 = romania_map %>%
+  left_join(. , data_wt_cond_2, by = c("id" = "County"))
+
+plot_wt_cond_2 = ggplot() +
+  geom_polygon(
+    data = map_wt_cond_2,
+    aes(fill = WeatherType, x = long, y = lat, group = group),
+    color="#dbdbdb"
+  ) +
+  coord_map() +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_fill_manual(
+    values = c("#b1b3c7", "#848bc4", "#888a99", "#343873"),
+    labels = c("Mist", "Sky Coverage Increasing", "Fog", "Rain")
+  ) +
+  labs(
+    title = "Most Unusual Weather Conditions in Romania",
+    fill = "Weather Type"
+  )
+
+rm(romania_df, data_wt_cond_2, map_wt_cond_2)
+
+plot_wt_cond_2
+```
+
+As it is the case here, it seems that the *Mist* weather is encountered mostly
+in the southern and eastern parts of the country, while the Oriental Carpathians
+present a *Fog* weather, with mostly *Rainy* days in Mures and Sibiu, inside the
+Transylvanian Plateau. Note that *Mist* is also a type of *Fog*, but one that
+contains less condensed water drops.
 
 #### **3.1.2. Other Weather Conditions**
 
@@ -376,20 +468,20 @@ below you can see the overall distribution of the weather conditions in the
 entire period among all the Romania's counties, and it looks like the most
 part of the weather is *Partially Cloudy*.
 
-```{r weather-types-plot-2, fig.width = 7, fig.height = 7, fig.align = 'center'}
-data_wt_cond_2 = data_wt_cond %>%
+```{r weather-types-plot-3, fig.width = 7, fig.height = 6, fig.align = 'center'}
+data_wt_cond_3 = data_wt_cond %>%
   summarise(across(all_of(cond_cols), sum, na.rm = TRUE)) %>%
   gather(key = "Condition", value = "Occurrences") %>%
   arrange(desc(Occurrences)) %>%
   mutate(Condition = factor(Condition, Condition)) %>%
   mutate(ypos = cumsum(Occurrences) - 0.5 * Occurrences )
 
-total_occurrences = (data_wt_cond_2 %>% summarise(sum(Occurrences)))[[1]]
+total_occurrences = (data_wt_cond_3 %>% summarise(sum(Occurrences)))[[1]]
 
-data_wt_cond_2 = data_wt_cond_2 %>%
+data_wt_cond_3 = data_wt_cond_3 %>%
   mutate(OccurrencesFreq = round(Occurrences / total_occurrences * 100, 2))
 
-plot_wt_cond_2 = data_wt_cond_2 %>%
+plot_wt_cond_3 = data_wt_cond_3 %>%
   ggplot(aes(x = "", y = Occurrences, fill = Condition)) +
   geom_bar(stat = "identity", width = 1, color="white") +
   coord_polar("y", start = 0) +
@@ -406,9 +498,9 @@ plot_wt_cond_2 = data_wt_cond_2 %>%
     size = 6
   )
 
-rm(data_wt_cond_2, data_wt_cond)
+rm(data_wt_cond_3)
 
-plot_wt_cond_2
+plot_wt_cond_3
 ```
 
 
