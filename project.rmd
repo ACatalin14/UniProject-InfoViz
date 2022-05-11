@@ -266,16 +266,20 @@ followed by **, Romania**, but we would like to have a column called *County*
 that contains only the name of the county (not the county seat) to use while
 plotting the Romania's map. It is important that the county names computed here
 to be the same as the ones employed in the *geoJson* file containing data about
-drawing the counties' borders (e.g. must rename *Bucharest* to *Bucuresti*). 
+drawing the counties' borders (e.g. must rename *Bucharest* to *Bucuresti*).
+
+In addition to this, we also create a new column *Mnemonic* which can be used
+in plotting interactive maps.
 
 ```{r compute-county-column}
 romania_counties = c("Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani","Brasov","Braila","Bucuresti","Buzau","Caras-Severin","Calarasi","Cluj","Constanta","Covasna","Dambovita","Dolj","Galati","Giurgiu","Gorj","Harghita","Hunedoara","Ialomita","Iasi","Maramures","Mehedinti","Mures","Neamt","Olt","Prahova","Satu Mare","Salaj","Sibiu","Suceava","Teleorman","Timis","Tulcea","Vaslui","Valcea","Vrancea")
 romania_county_seats = c("Alba Iulia","Arad","Pitesti","Bacau","Oradea","Bistrita","Botosani","Brasov","Braila","Bucuresti","Buzau","Resita","Calarasi","Cluj-Napoca","Constanta","Sfantu Gheorghe","Targoviste","Craiova","Galati","Giurgiu","Targu Jiu","Miercurea Ciuc","Deva","Slobozia","Iasi","Baia Mare","Drobeta-Turnu Severin","Targu Mures","Piatra Neamt","Slatina","Ploiesti","Satu Mare","Zalau","Sibiu","Suceava","Alexandria","Timisoara","Tulcea","Vaslui","Ramnicu Valcea","Focsani")
-
+romania_mnemonics = c("AB","AR","AG","BC","BH","BN","BT","BV","BR","B","BZ","CS","CL","CJ","CT","CV","DB","DJ","GL","GR","GJ","HR","HD","IL","IS","MM","MH","MS","NT","OT","PH","SM","SJ","SB","SV","TR","TM","TL","VS","VL","VN")
 # First create a column CountySeat, translate the special Bucharest case,
 # and then, based on the above lists, create the final column County
 data = data %>%
   mutate(CountySeat = gsub(', Romania', '', Address)) %>%
+  mutate(CountySeat = ifelse(CountySeat == "Bihor", "Oradea", CountySeat)) %>%
   mutate(
     CountySeat = ifelse(
       CountySeat == "Bucharest",
@@ -288,13 +292,18 @@ data = data %>%
       x = CountySeat,
       from = romania_county_seats,
       to = romania_counties
+    ),
+    Mnemonic = plyr::mapvalues(
+      x = CountySeat,
+      from = romania_county_seats,
+      to = romania_mnemonics
     )
   )
 
 # Display an example of several counties
 data %>%
   slice_sample(n=5) %>%
-  select(c(Address, CountySeat, County))
+  select(c(Address, CountySeat, County, Mnemonic))
 ```
 
 #### **2.4.2. Complete Ilfov's weather**
@@ -312,6 +321,7 @@ ilfov_data = data %>%
   mutate(
     Address = "Ilfov, Romania",
     County = "Ilfov",
+    Mnemonic = "IF",
     CountySeat = "Bucuresti",
     Latitude = 44.5355,
     Longitude = 26.2324
@@ -320,6 +330,42 @@ ilfov_data = data %>%
 data = rbind(data, ilfov_data)
 
 rm(ilfov_data)
+
+romania_counties = append(romania_counties, "Ilfov")
+romania_county_seats = append(romania_county_seats, "Bucuresti") 
+romania_mnemonics = append(romania_mnemonics, "IF")
+```
+
+### **2.5. Categorizing Time into Seasons**
+
+For some of our plots we detected a need to compare different seasons of the
+year, so we decided to create a new column specifically for this scope.
+
+```{r add-season-column}
+compute_season_from_date = function(date_col) {
+  month_col = substr(date_col, 1, 2)
+
+  seasons_col = map(month_col, function(month) {
+    if (month %in% c("03", "04", "05")) {
+      return("Spring")
+    }
+    
+    if (month %in% c("06", "07", "08")) {
+      return("Summer")
+    }
+    
+    if (month %in% c("09", "10", "11")) {
+      return("Autumn")
+    }
+    
+    return("Winter")
+  })
+  
+  return(as.character(seasons_col))
+}
+
+data = data %>%
+  mutate(Season = compute_season_from_date(Datetime))
 ```
 
 ## **3. Breaking down the Weather**
@@ -332,12 +378,12 @@ First we define the data set portion that we are going to use in this analysis.
 # Select relevant columns for this analysis.
 data_wt_cond = data %>% 
   select(
-    "Datetime", "County", "Latitude", "Longitude",
+    "Season", "County", "Mnemonic", "Latitude", "Longitude",
      "Mist":"HeavyFreezingRain",
      "ConditionPartiallyCloudy":"ConditionRain"
     )
-wt_cols = 5:41
-cond_cols = 42:45
+wt_cols = 6:42
+cond_cols = 43:46
 ```
 
 #### **3.1.1. Unusual Weather Types**
@@ -345,7 +391,7 @@ cond_cols = 42:45
 There is a wide variety of weather types that can be identified in Romania
 during the years' four seasons. We have identified 37 special ones, as labeled
 by the *Visual Crossing Weather API*, but what is the most common unusual
-weather in Romania? We could first take a look at the extact number of
+weather in Romania? We could first take a look at the exact number of
 occurrences for each weather type.
 
 ```{r weather-types-plot-1, fig.width = 9, fig.height = 7, fig.align = 'center'}
@@ -450,7 +496,7 @@ plot_wt_cond_2 = ggplot() +
     fill = "Weather Type"
   )
 
-rm(romania_df, data_wt_cond_2, map_wt_cond_2)
+rm(data_wt_cond_2, map_wt_cond_2)
 
 plot_wt_cond_2
 ```
@@ -463,10 +509,10 @@ contains less condensed water drops.
 
 #### **3.1.2. Other Weather Conditions**
 
-Here we look into the 4 conditions the data set has to offer. In the pie chart
-below you can see the overall distribution of the weather conditions in the
-entire period among all the Romania's counties, and it looks like the most
-part of the weather is *Partially Cloudy*.
+Here we look into the 4 conditions the data set has to offer related to the
+*Conditions* column. In the pie chart below you can see the overall distribution
+of the weather conditions in the entire period among all the Romania's counties,
+and it looks like the most part of the weather is *Partially Cloudy*.
 
 ```{r weather-types-plot-3, fig.width = 7, fig.height = 6, fig.align = 'center'}
 data_wt_cond_3 = data_wt_cond %>%
@@ -503,6 +549,126 @@ rm(data_wt_cond_3)
 plot_wt_cond_3
 ```
 
+The next part would be to plot these conditions on the Romania's map, however,
+we decided to take a step further, and plot their distributions among the four
+different seasons. Down below you can observe the most observed weather
+condition for each county during spring, summer, autumn, and winter time.
+
+```{r weather-types-plot-4, fig.width = 9, fig.height = 5, fig.align = 'center'}
+library(leaflet)
+
+romania_df = geojson_read("romania.geojson", what = "sp")
+
+data_wt_cond_4 = data_wt_cond %>%
+  select(c(Season, County, Mnemonic, all_of(cond_cols))) %>%
+  group_by(Season, County, Mnemonic) %>%
+  summarise(across(1:4, sum, na.rm = TRUE)) %>%
+  gather(key = "SkyCondition", value = "Occurrences", -c(County, Season, Mnemonic)) %>%
+  group_by(Season, County, Mnemonic) %>%
+  filter(Occurrences == max(Occurrences)) %>%
+  mutate(SkyCondition = factor(SkyCondition, SkyCondition)) %>%
+  ungroup()
+
+# Surprisingly, during Winter, Timis has both Rain and Partialy Cloudy as the most
+# encountered conditions (both with 140 occurences), so we must pick one to display.
+# We chose Partially Cloudy, since it looks like this is the trend in Romania
+data_wt_cond_4 = data_wt_cond_4 %>%
+  filter(County != "Timis" | Season != "Winter" | SkyCondition != "ConditionRain")
+
+convert_cond_col_to_text = function(cond_col) {
+  from_arr = c("ConditionClear", "ConditionPartiallyCloudy", "ConditionOvercast", "ConditionRain")
+  to_arr = c("Clear", "Partially Cloudy", "Overcast", "Rain")
+
+  return(plyr::mapvalues(
+    x = cond_col,
+    from = from_arr,
+    to = to_arr
+  ))
+}
+
+plot_conditions_distribution_for_season = function(season_name, season_palette) {
+  data_wt_cond_season_4 = data_wt_cond_4 %>%
+    filter(Season == season_name) %>%
+    select(County, SkyCondition)
+
+  map_wt_season_4 = romania_df
+  
+  map_wt_season_4@data = map_wt_season_4@data %>%
+    left_join(data_wt_cond_season_4, by = c("name" = "County"))
+  
+  cond_palette = colorFactor(
+    palette = season_palette,
+    levels = c("ConditionClear", "ConditionPartiallyCloudy", "ConditionOvercast", "ConditionRain"),
+    domain = map_wt_season_4@data$SkyCondition,
+    na.color = "transparent"
+  )
+  
+  season_labels <- sprintf(
+    "<strong>%s</strong><br/>Condition: <em>%s</em>",
+    map_wt_season_4$name,
+    convert_cond_col_to_text(map_wt_season_4$SkyCondition)  
+  ) %>% lapply(htmltools::HTML)
+  
+  
+  plot = leaflet(
+      map_wt_season_4,
+      options = leafletOptions(zoomSnap = 0.5, zoomDelta = 0.5)
+    ) %>%
+    setView(25, 46, 6.5) %>%
+    addProviderTiles(providers$OpenStreetMap.HOT) %>%
+    addPolygons(
+      fillColor = ~cond_palette(SkyCondition),
+      opacity = 1,
+      color = "#dbdbdb",
+      weight = 2,
+      fillOpacity = 0.7,
+      highlightOptions = highlightOptions(
+        weight = 4,
+        color = "#6b6b6b",
+        fillOpacity = 0.7,
+        bringToFront = TRUE
+      ),
+      label = season_labels,
+      labelOptions = labelOptions(
+        style = list("font-weight" = "normal", padding = "3px 8px"),
+        textsize = "15px",
+        direction = "auto"
+      )
+    ) %>%
+    addLegend(
+      pal = cond_palette,
+      values = ~SkyCondition,
+      opacity = 0.7,
+      title = paste(season_name, "Conditions"),
+      position = "topright",
+      labFormat = labelFormat(transform = convert_cond_col_to_text)
+    )
+  
+  return(plot)
+}
+
+spring_palette = c("#79f520", "#6aba2d", "#357a18", "#2c6314")
+summer_palette = c("#f5f120", "#bab72d", "#7a7818", "#636214")
+autumn_palette = c("#f56b20", "#ba5e2d", "#7a3918", "#632c14")
+winter_palette = c("#20d9f5", "#2daaba", "#18737a", "#0e3b40")
+
+plot_conditions_distribution_for_season("Spring", spring_palette)
+plot_conditions_distribution_for_season("Summer", summer_palette)
+plot_conditions_distribution_for_season("Autumn", autumn_palette)
+plot_conditions_distribution_for_season("Winter", winter_palette)
+```
+
+We can conclude with a few observations in this section:
+
+- during spring, only the **Rain** and **Partially Cloudy** weather
+are dominant in Romania;
+- during summer and autumn, there is no county having a dominant **Overcast**
+weather;
+- winter is the only season where the **Overcast** weather is dominant, even
+withing 10 counties;
+- every season, Romania is dominated by a **Partially Cloudy** weather;
+- Cluj and Sibiu have presented a dominant **Rain** weather during all of
+the seasons.
 
 ### **3.2. Exploring the Temperatures**
 
