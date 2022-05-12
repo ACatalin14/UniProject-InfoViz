@@ -10,6 +10,14 @@ output:
     
 ---
 
+```{css, echo=FALSE}
+.center-plot {
+  display: table;
+  margin-right: auto;
+  margin-left: auto;
+}
+```
+
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(include = TRUE, echo = TRUE, warning = FALSE)
 ```
@@ -36,7 +44,7 @@ convention **weather_YEAR_COUNTY.csv**. So, for 41 Romanian counties and 11 year
 we would obtain 451 csv files. However, we need to work with a single data set,
 so we decided to merge all of them into a single one in the code block below.
 
-```{r dataset-creation}
+```{r dataset-creation, message = F}
 library(tidyverse)
 library(ggplot2)
 library(plotly)
@@ -275,6 +283,7 @@ in plotting interactive maps.
 romania_counties = c("Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani","Brasov","Braila","Bucuresti","Buzau","Caras-Severin","Calarasi","Cluj","Constanta","Covasna","Dambovita","Dolj","Galati","Giurgiu","Gorj","Harghita","Hunedoara","Ialomita","Iasi","Maramures","Mehedinti","Mures","Neamt","Olt","Prahova","Satu Mare","Salaj","Sibiu","Suceava","Teleorman","Timis","Tulcea","Vaslui","Valcea","Vrancea")
 romania_county_seats = c("Alba Iulia","Arad","Pitesti","Bacau","Oradea","Bistrita","Botosani","Brasov","Braila","Bucuresti","Buzau","Resita","Calarasi","Cluj-Napoca","Constanta","Sfantu Gheorghe","Targoviste","Craiova","Galati","Giurgiu","Targu Jiu","Miercurea Ciuc","Deva","Slobozia","Iasi","Baia Mare","Drobeta-Turnu Severin","Targu Mures","Piatra Neamt","Slatina","Ploiesti","Satu Mare","Zalau","Sibiu","Suceava","Alexandria","Timisoara","Tulcea","Vaslui","Ramnicu Valcea","Focsani")
 romania_mnemonics = c("AB","AR","AG","BC","BH","BN","BT","BV","BR","B","BZ","CS","CL","CJ","CT","CV","DB","DJ","GL","GR","GJ","HR","HD","IL","IS","MM","MH","MS","NT","OT","PH","SM","SJ","SB","SV","TR","TM","TL","VS","VL","VN")
+
 # First create a column CountySeat, translate the special Bucharest case,
 # and then, based on the above lists, create the final column County
 data = data %>%
@@ -336,7 +345,7 @@ romania_county_seats = append(romania_county_seats, "Bucuresti")
 romania_mnemonics = append(romania_mnemonics, "IF")
 ```
 
-### **2.5. Categorizing Time into Seasons**
+### **2.5. Categorizing Time**
 
 For some of our plots we detected a need to compare different seasons of the
 year, so we decided to create a new column specifically for this scope.
@@ -368,6 +377,35 @@ data = data %>%
   mutate(Season = compute_season_from_date(Datetime))
 ```
 
+...as well as for the month...
+
+```{r}
+compute_month_from_date = function(date_col) {
+  month_col = substr(date_col, 1, 2)
+  mapping = list(
+    "01" = "January",
+    "02" = "February",
+    "03" = "March",
+    "04" = "April",
+    "05" = "May",
+    "06" = "June",
+    "07" = "July",
+    "08" = "August",
+    "09" = "September",
+    "10" = "October",
+    "11" = "November",
+    "12" = "December"
+  )
+  
+  return(as.character(mapping[month_col]))
+}
+
+months_names = c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+
+data = data %>%
+  mutate(Month = compute_month_from_date(Datetime)) %>%
+  mutate(Month = factor(Month, levels = months_names))
+```
 ## **3. Breaking down the Weather**
 
 ### **3.1. Exploring the Weather Types**
@@ -444,6 +482,8 @@ plot_wt_cond_1 = data_wt_cond_1 %>%
 rm(data_wt_cond_1, total_occurrences)
 
 ggplotly(plot_wt_cond_1, tooltip = "text")
+
+rm(plot_wt_cond_1)
 ```
 
 
@@ -457,12 +497,12 @@ with *Rain*, *Fog*, and *Snow*.
 In order to confirm this hypothesis, we decided to plot the most unusual weather
 for each county and check the results in the following map.
 
-```{r weather-types-plot-2, fig.width = 10, fig.height = 7, fig.align = 'center'}
+```{r weather-types-plot-2, fig.width = 10, fig.height = 7, fig.align = 'center', message = F}
 library(geojsonio)
 library(broom)
 
-romania_df = geojson_read("romania.geojson", what = "sp")
-romania_map = tidy(romania_df, region = "name")
+romania_spdf = geojson_read("romania.geojson", what = "sp")
+romania_map = tidy(romania_spdf, region = "name")
 
 data_wt_cond_2 = data_wt_cond %>%
   select(c(County, all_of(wt_cols))) %>%
@@ -478,7 +518,7 @@ data_wt_cond_2 = data_wt_cond %>%
 map_wt_cond_2 = romania_map %>%
   left_join(. , data_wt_cond_2, by = c("id" = "County"))
 
-plot_wt_cond_2 = ggplot() +
+ggplot() +
   geom_polygon(
     data = map_wt_cond_2,
     aes(fill = WeatherType, x = long, y = lat, group = group),
@@ -496,9 +536,7 @@ plot_wt_cond_2 = ggplot() +
     fill = "Weather Type"
   )
 
-rm(data_wt_cond_2, map_wt_cond_2)
-
-plot_wt_cond_2
+rm(romania_map, romania_spdf, data_wt_cond_2, map_wt_cond_2)
 ```
 
 As it is the case here, it seems that the *Mist* weather is encountered mostly
@@ -527,7 +565,7 @@ total_occurrences = (data_wt_cond_3 %>% summarise(sum(Occurrences)))[[1]]
 data_wt_cond_3 = data_wt_cond_3 %>%
   mutate(OccurrencesFreq = round(Occurrences / total_occurrences * 100, 2))
 
-plot_wt_cond_3 = data_wt_cond_3 %>%
+data_wt_cond_3 %>%
   ggplot(aes(x = "", y = Occurrences, fill = Condition)) +
   geom_bar(stat = "identity", width = 1, color="white") +
   coord_polar("y", start = 0) +
@@ -544,9 +582,7 @@ plot_wt_cond_3 = data_wt_cond_3 %>%
     size = 6
   )
 
-rm(data_wt_cond_3)
-
-plot_wt_cond_3
+rm(data_wt_cond_3, total_occurrences)
 ```
 
 The next part would be to plot these conditions on the Romania's map, however,
@@ -554,10 +590,10 @@ we decided to take a step further, and plot their distributions among the four
 different seasons. Down below you can observe the most observed weather
 condition for each county during spring, summer, autumn, and winter time.
 
-```{r weather-types-plot-4, fig.width = 9, fig.height = 5, fig.align = 'center'}
+```{r weather-types-plot-4, fig.width = 9, fig.height = 5, fig.align = 'center', message = F}
 library(leaflet)
 
-romania_df = geojson_read("romania.geojson", what = "sp")
+romania_spdf = geojson_read("romania.geojson", what = "sp")
 
 data_wt_cond_4 = data_wt_cond %>%
   select(c(Season, County, Mnemonic, all_of(cond_cols))) %>%
@@ -591,7 +627,7 @@ plot_conditions_distribution_for_season = function(season_name, season_palette) 
     filter(Season == season_name) %>%
     select(County, SkyCondition)
 
-  map_wt_season_4 = romania_df
+  map_wt_season_4 = romania_spdf
   
   map_wt_season_4@data = map_wt_season_4@data %>%
     left_join(data_wt_cond_season_4, by = c("name" = "County"))
@@ -656,9 +692,12 @@ plot_conditions_distribution_for_season("Spring", spring_palette)
 plot_conditions_distribution_for_season("Summer", summer_palette)
 plot_conditions_distribution_for_season("Autumn", autumn_palette)
 plot_conditions_distribution_for_season("Winter", winter_palette)
+
+rm(spring_palette, summer_palette, autumn_palette, winter_palette)
+rm(data_wt_cond_4, data_wt_cond, wt_cols, cond_cols)
 ```
 
-We can conclude with a few observations in this section:
+We can conclude this section with a few observations:
 
 - during spring, only the **Rain** and **Partially Cloudy** weather
 are dominant in Romania;
@@ -675,6 +714,196 @@ the seasons.
 <!-- This chapter is for Min Temp, Max Temp, Temp columns (3)
 + DateTime/Counties -->
 
+In this section we are going to look at the first thing that comes to one's mind
+when talking about weather: **Temperature**.
+
+We will first look at the distribution of the minimum, maximum and average daily
+temperature across all Romania's counties during the entire period 2011-2021.
+This result is achieved by averaging the temperatures for each day across all 
+the 42 counties, and then displaying them into the violin plot from below.
+
+```{r temperatures-plot-1, fig.width = 9, fig.height = 5, fig.align = 'center'}
+data_temp_1 = data %>%
+  select(Datetime, MinimumTemperature, MaximumTemperature, Temperature) %>%
+  group_by(Datetime) %>%
+  summarise(
+    Minimum = mean(MinimumTemperature, na.rm = TRUE),
+    Maximum = mean(MaximumTemperature, na.rm = TRUE),
+    Average = mean(Temperature, na.rm = TRUE)
+  ) %>%
+  select(-Datetime) %>%
+  gather(key = "Temperature", value = "Value") %>%
+  mutate(Temperature = factor(Temperature, levels=c("Minimum", "Average", "Maximum")))
+
+plot_temp_1 = ggplot(data_temp_1, aes(x=Temperature, y=Value, fill=Temperature)) +
+  geom_violin(alpha=0.8) +
+  labs(
+    title = "Temperature distribution in Romania during 2011-2021",
+    x = "Daily Temperatures",
+    y = ""
+  ) +
+  scale_fill_manual(
+    name = "",  # remove legend title
+    values = c("#1922d4", "#d4cb19", "#d41919"),
+    labels = c("Minimum", "Average", "Maximum")
+  ) +
+  scale_y_continuous(
+    breaks = seq(-20, 40, 5),
+    limits = c(-20, 40),
+    labels = function (x) paste(x, "°C")
+  ) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplotly(plot_temp_1, tooltip = "text")
+
+rm(plot_temp_1, data_temp_1)
+```
+
+A few of the notable aspects to observe in this plot are the following:
+
+- as expected, minimum temperatures present lower values than the average ones,
+which in turn are lower than the maximum ones;
+- all of the 3 distributions tend to present 3 modes:
+  - daily minimums get more dense around **1 °C** and **15 °C**;
+  - daily averages get more dense around **4 °C** and **20 °C**;
+  - daily maximums get more dense around **12.5 °C** and **26 °C**;
+
+A reason for the appearance of two modes in each distribution can be given by
+the extreme temperature differences between summer and winter seasons. If we
+analyzed the temperatures distribution for each season, we would find without
+any surprise significant differences, which is what we have done in the
+following plot.
+
+```{r temperatures-plot-2, results = F, message = F}
+data_temp_2 = data %>%
+  select(Season, Datetime, MinimumTemperature, MaximumTemperature, Temperature) %>%
+  group_by(Datetime, Season) %>%
+  summarise(
+    Minimum = mean(MinimumTemperature, na.rm = TRUE),
+    Maximum = mean(MaximumTemperature, na.rm = TRUE),
+    Average = mean(Temperature, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  select(-Datetime) %>%
+  gather(key = "Temperature", value = "Value", 2:4) %>%
+  mutate(Temperature = factor(Temperature, levels=c("Minimum", "Average", "Maximum"))) %>%
+  mutate(Season = factor(Season, levels=c("Spring", "Summer", "Autumn", "Winter")))
+
+plot_temp_2 = ggplot(data_temp_2, aes(x=Temperature, y=Value, fill=Temperature)) +
+  geom_violin(alpha=0.8) +
+  facet_wrap(~Season) +
+  labs(
+    title = "Temperature distribution in Romania by seasons",
+    x = "Daily Temperatures",
+    y = ""
+  ) +
+  scale_fill_manual(
+    name = "",  # remove legend title
+    values = c("#1922d4", "#d4cb19", "#d41919"),
+    labels = c("Minimum", "Average", "Maximum")
+  ) +
+  scale_y_continuous(
+    breaks = seq(-20, 40, 5),
+    limits = c(-20, 40),
+    labels = function (x) paste(x, "°C")
+  ) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplotly(plot_temp_2, tooltip = "text")
+```
+
+<div class='center-plot'>
+```{r temperatures-plot-2, fig.width = 9, fig.height = 5, echo = F, message = F}
+```
+</div>
+
+Looking at other time frames, we decided to look at the month level, and
+compare the daily average temperatures for each month in Romania over the last
+11 years. This way we can conclude which would usually be the hottest/coldest
+months in Romania.
+
+```{r temperatures-plot-3, fig.width = 9, fig.height = 6, message = F}
+library(ggridges)
+
+rm(plot_temp_2, data_temp_2)
+
+data_temp_3 = data %>%
+  mutate(Month = factor(Month, levels = rev(months_names)))
+
+ggplot(data_temp_3, aes(x = Temperature, y = Month, fill = ..x..)) +
+  geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01) +
+  scale_fill_viridis_c(option = "C") +
+  theme(
+    legend.position="none",
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  scale_x_continuous(
+    breaks = seq(-20, 32.5, 5),
+    limits = c(-20, 32.5),
+    labels = function (x) paste(x, "°C")
+  ) +
+  labs(
+    title = "Temperature distribution in Romania by months (2011-2021)",
+    x = "Daily Average Temperatures",
+    y = ""
+  )
+
+rm(data_temp_3)
+```
+
+Judging by the ridgeline plot from above, we can tell that **August** is usually
+the hottest month of the year, with a mean of around **23 °C**, while **January**
+can represent the coldest month of the year with a mean of around **0 °C**, having
+slightly more lower temperatures than in **December**.
+
+Keeping in mind that we can investigate temperatures at a month level, we tried
+to go back to Minimums, Maximums and Averages, and compute their means for
+the entire country and depict them in the grouped barplot below.
+
+```{r temperatures-plot-4, fig.width = 9, fig.height = 6, message = F}
+data_temp_4 = data %>%
+  group_by(Month) %>%
+  summarise(
+    Minimum = mean(MinimumTemperature, na.rm = TRUE),
+    Maximum = mean(MaximumTemperature, na.rm = TRUE),
+    Average = mean(Temperature, na.rm = TRUE)
+  ) %>%
+  gather(key = "Temperature", value = "Value", Minimum, Maximum, Average) %>%
+  mutate(Temperature = factor(Temperature, levels = c("Maximum", "Average", "Minimum"))) %>%
+  mutate(Month = factor(Month, rev(months_names)))
+
+plot_temp_4 = ggplot(
+    data_temp_4,
+    aes(
+      x = Month,
+      y = Value,
+      fill = Temperature,
+      text = paste("Mean of", paste0(Temperature, "s:"), round(Value, 2), "°C")
+    )
+  ) +
+  geom_bar(position = "dodge", stat = "identity", alpha = 0.7) +
+  coord_flip() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(
+    breaks = seq(-5, 30, 5),
+    limits = c(-5, 30),
+    labels = function (x) paste(x, "°C")
+  ) +
+  scale_fill_manual(
+    name = "",  # remove legend title
+    values = c("#d41919", "#d4cb19", "#1922d4"),
+    labels = c("Minimum", "Average", "Maximum")
+  ) +
+  labs(
+    title = "Mean Temperatures in Romania by months (2011-2021)",
+    y = "Daily Temperatures",
+    x = ""
+  )
+
+ggplotly(plot_temp_4, tooltip = "text")
+
+rm(plot_temp_4, data_temp_4)
+```
 
 ### **3.3. Exploring the Winds**
 
