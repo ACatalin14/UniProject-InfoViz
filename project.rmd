@@ -549,7 +549,7 @@ ggplot() +
     fill = "Weather Type"
   )
 
-rm(romania_map, romania_spdf, data_wt_cond_2, map_wt_cond_2)
+rm(romania_map, data_wt_cond_2, map_wt_cond_2)
 ```
 
 As it is the case here, it seems that the *Mist* weather is encountered mostly
@@ -605,8 +605,6 @@ condition for each county during spring, summer, autumn, and winter time.
 
 ```{r weather-types-plot-4, fig.width = 9, fig.height = 5, fig.align = 'center', message = F}
 library(leaflet)
-
-romania_spdf = geojson_read("romania.geojson", what = "sp")
 
 data_wt_cond_4 = data_wt_cond %>%
   select(c(Season, County, Mnemonic, all_of(cond_cols))) %>%
@@ -823,6 +821,8 @@ plot_temp_2 = ggplot(data_temp_2, aes(x=Temperature, y=Value, fill=Temperature))
   theme(plot.title = element_text(hjust = 0.5))
 
 ggplotly(plot_temp_2, tooltip = "text")
+
+rm(data_temp_2, plot_temp_2)
 ```
 
 <div class='center-plot'>
@@ -923,7 +923,7 @@ plot_temp_4 = ggplot(
 
 ggplotly(plot_temp_4, tooltip = "text")
 
-rm(plot_temp_4, data_temp_4)
+rm(plot_temp_4, data_temp_4, bar_texts)
 ```
 
 As confirmed in this plot as well, **August** contains the highest Maximum and
@@ -1024,6 +1024,152 @@ can also confirm that Romania is affected by the global warming, a well known
 phenomenon that affects multiple countries leading to higher and higher
 temperatures.
 
+The next step in this section consists of looking deeper into the temperatures
+and depict them depending on the counties. We expect lower temperatures to be
+registered around the mountains and higher ones in counties situated in plain
+relief.
+
+```{r temperatures-plot-6, fig.width = 9, fig.height = 5, message = F}
+data_temp_6 = data %>%
+  select(County, MinimumTemperature, Temperature, MaximumTemperature) %>%
+  group_by(County) %>%
+  summarise(
+    Minimum = min(MinimumTemperature, na.rm = TRUE),
+    Average = mean(Temperature, na.rm = TRUE),
+    Maximum = max(MaximumTemperature, na.rm = TRUE),
+  )
+
+date_temp_min_datetimes_6 = data %>%
+  select(County, MinimumTemperature, Datetime) %>%
+  group_by(County) %>%
+  filter(MinimumTemperature == min(MinimumTemperature, na.rm = TRUE)) %>%
+  group_by(County, MinimumTemperature) %>%
+  summarise(
+    MinTempDatetime = first(Datetime)
+  ) %>%
+  ungroup() %>%
+  select(County, MinTempDatetime) %>%
+  mutate(MinTempDatetime = format(as.Date(MinTempDatetime, format = "%m/%d/%Y"), "%d %b %Y"))
+
+date_temp_max_datetimes_6 = data %>%
+  select(County, MaximumTemperature, Datetime) %>%
+  group_by(County) %>%
+  filter(MaximumTemperature == max(MaximumTemperature, na.rm = TRUE)) %>%
+  group_by(County, MaximumTemperature) %>%
+  summarise(
+    MaxTempDatetime = first(Datetime)
+  ) %>%
+  ungroup() %>%
+  select(County, MaxTempDatetime) %>%
+  mutate(MaxTempDatetime = format(as.Date(MaxTempDatetime, format = "%m/%d/%Y"), "%d %b %Y"))
+
+data_temp_6 = data_temp_6 %>%
+  left_join(date_temp_min_datetimes_6) %>%
+  left_join(date_temp_max_datetimes_6)
+
+map_temp_6 = romania_spdf
+
+map_temp_6@data = map_temp_6@data %>%
+  left_join(data_temp_6, by = c("name" = "County"))
+
+bins = c(4, 6.5, 8.5, 10, 11, 12, 13, 14)
+temp_palette = colorBin("YlOrRd", domain = map_temp_6$Average, bins = bins)
+
+temp_labels = sprintf(
+  "<strong>%s</strong><br/>
+  Average Temperature: <strong><em>%s °C</em></strong><br/>
+  Minimum: <strong><em>%s °C</em></strong> <em>(%s)</em><br/>
+  Maximum: <strong><em>%s °C</em></strong> <em>(%s)</em>",
+  map_temp_6$name,
+  round(map_temp_6$Average, 2),
+  round(map_temp_6$Minimum, 2),
+  map_temp_6$MinTempDatetime,
+  round(map_temp_6$Maximum, 2),
+  map_temp_6$MaxTempDatetime
+) %>% lapply(htmltools::HTML)
+
+leaflet(
+    map_temp_6,
+    options = leafletOptions(zoomSnap = 0.5, zoomDelta = 0.5)
+  ) %>%
+  setView(25, 46, 6.5) %>%
+  addProviderTiles(providers$OpenStreetMap.HOT) %>%
+  addPolygons(
+    fillColor = ~temp_palette(Average),
+    opacity = 1,
+    color = "#dbdbdb",
+    weight = 2,
+    fillOpacity = 0.7,
+    highlightOptions = highlightOptions(
+      weight = 4,
+      color = "#6b6b6b",
+      fillOpacity = 0.7,
+      bringToFront = TRUE
+    ),
+    label = temp_labels,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal", padding = "3px 8px"),
+      textsize = "15px",
+      direction = "auto"
+    )
+  ) %>%
+  addLegend(
+    pal = temp_palette,
+    values = ~Average,
+    opacity = 0.7,
+    title = "Temperature (°C)",
+    position = "topright"
+  )
+
+rm(data_temp_6, date_temp_min_datetimes_6, date_temp_max_datetimes_6, map_temp_6, bins, temp_palette, temp_labels)
+```
+
+Another way to look at the temperature distributions among counties is by
+month. In order to study from this perspective, we decided to use a heat plot
+and depict the average temperature in each county for each month among the 11
+observed years.
+
+```{r temperatures-plot-7, fig.width = 9, fig.height = 7, message = F}
+library(heatmaply)
+
+data_temp_7 = data %>%
+  select(County, Month, Temperature) %>%
+  group_by(County, Month) %>%
+  summarise(AverageTemperature = round(mean(Temperature, na.rm = TRUE), 2)) %>%
+  ungroup() %>%
+  arrange(County) %>%
+  mutate(County = factor(County))
+
+matrix_temp_7 = matrix(data_temp_7$AverageTemperature, nrow = 42, ncol = 12, byrow = TRUE)
+rownames(matrix_temp_7) = levels(data_temp_7$County)
+colnames(matrix_temp_7) = levels(data_temp_7$Month)
+
+# Sort the matrix rows by the temperatures registered in August (hottest month)
+matrix_temp_7 = matrix_temp_7[order(matrix_temp_7[,8], decreasing = TRUE),]
+
+heatmaply(matrix_temp_7,
+  dendrogram = "none",
+  xlab = "",
+  ylab = "", 
+  main = "",
+  margins = c(60,100,40,20),
+  grid_color = "white",
+  grid_width = 0.00001,
+  titleX = FALSE,
+  hide_colorbar = TRUE,
+  branches_lwd = 0.1,
+  label_names = c("County", "Month", "Average Temperature"),
+  label_format_fun = function(x) paste(round(x, 2), "°C"),
+  fontsize_row = 8,
+  fontsize_col = 8,
+  labCol = colnames(matrix_temp_7),
+  labRow = rownames(matrix_temp_7),
+  heatmap_layers = theme(axis.line=element_blank()),
+  colors = plasma
+)
+
+rm(data_temp_7, matrix_temp_7)
+```
 ### **3.3. Exploring the Winds**
 
 <!-- This chapter is for Wind Speed, Wind Gust, Wind Direction, Wind Chill,
