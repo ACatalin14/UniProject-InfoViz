@@ -71,7 +71,31 @@ rm(MERGE_ALL_DATASETS)
 
 ### **1.2. The data set's columns**
 
-***TODO:*** Describe the meaning of each relevant column using [this documentation](https://www.visualcrossing.com/resources/documentation/weather-data/weather-data-documentation/)
+The data set that we have created contains 25 columns, out of which the most
+relevant (used in our EDA) are described in the table below. Note that to these
+columns, many others will be added during the data cleaning process.
+
+For complete details related to the data given by the API, please refer to
+[**this page**](https://www.visualcrossing.com/resources/documentation/weather-data/weather-data-documentation/).
+
+| Column Name | Description | Observations |
+| :---------: | :---------: | :----------: |
+| Address     | The address used by the API for the location from where the weather should be registered | Usually of form *COUNTY_SEAT_NAME, Romania*.
+| Date time   |  The date for when the weather is registered | The weather associated to a day represents the average of 24 hourly collected data. |
+| Minimum Temperature | Minimum temperature over the day | Measured in °C. |
+| Maximum Temperature | Maximum temperature over the day | Measured in °C. |
+| Temperature | Average temperature over the day | Measured in °C. |
+| Wind Speed | 2 minute average of wind speed | Measured in Km/h. |
+| Wind Direction | 2 minute average of wind direction | Measured as a number in the range 0-360, representing the degrees count on the trigonometric circle. |
+| Precipitation | Amount of liquid equivalent precipitation (rain, snow etc.) | Measured in millimeters. |
+| Precipitation Cover |	Percentage of time where measurable precipitation occurred | Ranges from 0 to 100. |
+| Snow Depth | Depth of snow on ground | Measured in centimeters. |
+| Visibility | Distance that can be viewed | Measured in km. |
+| Cloud Cover | Percentage of sky that is covered by cloud | Ranges from 0 to 100. |
+| Weather Type | Weather types reported by weather station | String of multiple weather types separated by commas. |
+| Latitude | The latitude of the address | It is a floating number. |
+| Longitude | The longitude of the address | It is a floating number. |
+| Conditions | Weather sky conditions | Same format as *Weather Types*, but with much lesser options. |
 
 ## **2. Cleaning the Data Set**
 
@@ -208,7 +232,7 @@ wind_direction_table = data.frame(
 )
 ```
 
-![Table for Wind Cardinal Directions and Degrees](./images/wind_directions.png)
+![](./images/wind_directions.png)
 
 Using the above table, we can take each value from the *WindDirection* column
 and build the new column *WindCardinalDirection*.
@@ -774,7 +798,7 @@ A few of the notable aspects to observe in this plot are the following:
 
 - as expected, minimum temperatures present lower values than the average ones,
 which in turn are lower than the maximum ones;
-- all of the 3 distributions tend to present 3 modes:
+- all of the 3 distributions tend to present 2 modes:
   - daily minimums get more dense around **1 °C** and **15 °C**;
   - daily averages get more dense around **4 °C** and **20 °C**;
   - daily maximums get more dense around **12.5 °C** and **26 °C**;
@@ -933,8 +957,8 @@ other side, the lowest Minimum, Maximum and Average means are registered during
 **January**.
 
 Before going into the maps, one last thing we want to show is the evolution
-of the temperatures in Romania across the 11 years, on a monthly basis For this,
-we have created the area plot down below.
+of the temperatures in Romania across the 11 years, on a monthly basis. For this,
+we have created the line plot down below.
 
 ```{r temperatures-plot-5, results = F, message = F}
 data_temp_5 = data %>%
@@ -1125,7 +1149,7 @@ rm(data_temp_6, date_temp_min_datetimes_6, date_temp_max_datetimes_6, map_temp_6
 ```
 
 Another way to look at the temperature distributions among counties is by
-month. In order to study from this perspective, we decided to use a heat plot
+month. In order to study from this perspective, we decided to use a heatmap
 and depict the average temperature in each county for each month among the 11
 observed years.
 
@@ -1172,17 +1196,105 @@ rm(data_temp_7, matrix_temp_7)
 ```
 ### **3.3. Exploring the Winds**
 
-<!-- This chapter is for Wind Speed, Wind Gust, Wind Direction, Wind Chill,
-Wind Cardinal Direction columns (5) + DateTime/Counties -->
+Another aspect to look into when analyzing the weather of a country is the
+winds. Here we will look into the direction from where the wind is coming
+mostly in Romania.
 
+```{r winds-plot-1, fig.width = 9, fig.height = 6, message = F}
+data_wind_1 = data %>%
+  select(WindCardinalDirection) %>%
+  filter(!is.na(WindCardinalDirection)) %>%
+  group_by(WindCardinalDirection) %>%
+  count(name = "Frequency") %>%
+  ungroup() %>%
+  mutate(Frequency = round(Frequency / sum(Frequency) * 100, 2)) %>%
+  mutate(Id = 1:n())
 
-### **3.4. Exploring the Humidity**
+label_data = data_wind_1
 
-<!-- This chapter is for Dew point, Relative Humid, Heat Index columns (3)
-+ DateTime/Counties -->
+bars_count = nrow(label_data)
+angle = 90 - 360 * (label_data$Id - 0.5) / bars_count
+label_data$Hjust = ifelse(angle < -90, 1, 0)
+label_data$Angle = ifelse(angle < -90, angle + 180, angle)
 
+ggplot(data_wind_1, aes(x = WindCardinalDirection, y = Frequency)) +
+  geom_bar(stat="identity", fill=alpha("blue", 0.6)) +
+  ylim(-5, 13) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+  ) +
+  coord_polar(start = -0.0625 * pi) +  # Center the bars accordingly to N/E/S/W
+  ggtitle("Distribution of Wind Directions in Romania (2011-2021)") +
+  geom_text(
+    data = label_data,
+    aes(x = Id, y = Frequency + 1, label = WindCardinalDirection, hjust = Hjust),
+    color = "black",
+    fontface = "bold",
+    alpha = 0.6,
+    size = 5,
+    angle = label_data$Angle,
+    inherit.aes = FALSE
+  )
+ 
+rm(data_wind_1, label_data, bars_count, angle)
+```
 
-### **3.5. Exploring the Precipitations and their effects**
+Looking at the circular barplot from above, we can easily tell that the winds
+entering Romania come mostly from the South-Western part, while they rarely
+come from North.
+
+Another property of the wind is its speed, so we can also take a look at how
+fast the winds can get in our country.
+
+```{r winds-plot-2, fig.width = 9, fig.height = 6, message = F}
+data_wind_2 = data %>%
+  select(WindSpeed) %>%
+  filter(!is.na(WindSpeed))
+
+median = median(data_wind_2$WindSpeed, na.rm = TRUE)
+mean = mean(data_wind_2$WindSpeed, na.rm = TRUE)
+
+ggplot(data_wind_2, aes(x = WindSpeed)) +
+  geom_histogram(binwidth = 3, fill = "#0059ff", color = "#1400c9", alpha = 0.8) +
+  ggtitle("Distribution of Wind Speed") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(y = "Occurrences", x = "Wind Speed (km/h)") +
+  xlim(0, 50) +
+  scale_x_continuous(
+    breaks = seq(0, 50, 2),
+    limits = c(0, 50)
+  ) +
+  geom_vline(
+    xintercept = median,
+    linetype = "dashed",
+    color = "red",
+    size = 1
+  ) +
+  annotate(geom = "text", x = median - 2.2, y = 37500, label = "Median", color = "red") +
+  geom_vline(
+    xintercept = mean,
+    linetype = "dashed",
+    color = "black",
+    size = 1
+  ) +
+  annotate(geom = "text", x = mean + 2, y = 36000, label = "Mean", color = "black")
+
+rm(data_wind_2)
+```
+In the Wind Speed's histogram, we can tell that the most observed speeds are
+around **11 km/h - 18 km/h**, with a mean of **~17 km/h** and a median value of
+**14.5 km/h**.
+
+A possible reason for which the mean is slightly bigger than the median is given
+by other outliers that reside at the right wing of the histogram, besides the
+ones that are visible in this plot. Other values that have been cut out of the
+plot can go in bigger ranges like **150 km/h - 200 km/h**.
+
+### **3.4. Exploring the Precipitations and their effects**
 
 <!-- This chapter is for Precip, Precip Cover, Snow Depth, Cloud Cover,
 Visibility, Visibility Level, Sea level pressure columns (7) + DateTime/Counties
