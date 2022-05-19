@@ -723,10 +723,10 @@ summer_palette = c("#f5f120", "#bab72d", "#7a7818", "#636214")
 autumn_palette = c("#f56b20", "#ba5e2d", "#7a3918", "#632c14")
 winter_palette = c("#20d9f5", "#2daaba", "#18737a", "#0e3b40")
 
-plot_conditions_distribution_for_season("Spring", spring_palette)
-plot_conditions_distribution_for_season("Summer", summer_palette)
-plot_conditions_distribution_for_season("Autumn", autumn_palette)
-plot_conditions_distribution_for_season("Winter", winter_palette)
+#plot_conditions_distribution_for_season("Spring", spring_palette)
+#plot_conditions_distribution_for_season("Summer", summer_palette)
+#plot_conditions_distribution_for_season("Autumn", autumn_palette)
+#plot_conditions_distribution_for_season("Winter", winter_palette)
 
 rm(spring_palette, summer_palette, autumn_palette, winter_palette)
 rm(data_wt_cond_4, data_wt_cond, wt_cols, cond_cols)
@@ -1295,56 +1295,78 @@ ones that are visible in this plot. Other values that have been cut out of the
 plot can go in bigger ranges like **150 km/h - 200 km/h**.
 
 ### **3.4. Exploring the Precipitations and their effects**
+Precipitation is one of the three main processes (evaporation, condensation, and precipitation) that constitute the hydrologic cycle, the continual exchange of water between the atmosphere and Earth’s surface. Water evaporates from ocean, land, and freshwater surfaces, is carried aloft as vapour by the air currents, condenses to form clouds, and ultimately is returned to Earth’s surface as precipitation. (Britannica.com)
+We want to see the average precipitation level of each county in each month to measure the potential rainy month for each county. We use heatmap for this.
+```{r precip, fig.width = 9, fig.height = 6, message = F}
+data_temp_8 = data %>%
+  select(County, Month, Precipitation, SeaLevelPressure) %>%
+  group_by(County, Month) %>%
+  summarise(AveragePrecipitation = round(mean(Precipitation, na.rm = TRUE), 2)) %>%
+  ungroup() %>%
+  arrange(County) %>%
+  mutate(County = factor(County))
 
-<!-- This chapter is for Precip, Precip Cover, Snow Depth, Cloud Cover,
-Visibility, Visibility Level, Sea level pressure columns (7) + DateTime/Counties
+matrix_temp_8 = matrix(data_temp_8$AveragePrecipitation, nrow = 42, ncol = 12, byrow = TRUE)
+rownames(matrix_temp_8) = levels(data_temp_8$County)
+colnames(matrix_temp_8) = levels(data_temp_8$Month)
 
-Why sea level pressure is relevant to precipitations? Taken from Google:
+matrix_temp_8 = matrix_temp_8[order(matrix_temp_8[,8], decreasing = TRUE),]
 
-Maps of sea-level isobars help weather forecasters quickly spot areas of low
-and high pressure, which can help them identify areas of potentially stormy
-weather.
--->
+heatmaply(matrix_temp_8,
+  dendrogram = "none",
+  xlab = "",
+  ylab = "", 
+  main = "",
+  margins = c(60,100,40,20),
+  grid_color = "white",
+  grid_width = 0.00001,
+  titleX = FALSE,
+  hide_colorbar = TRUE,
+  branches_lwd = 0.1,
+  label_names = c("County", "Month", "Average Precipitation"),
+  label_format_fun = function(x) paste(round(x, 2), "°C"),
+  fontsize_row = 8,
+  fontsize_col = 8,
+  labCol = colnames(matrix_temp_8),
+  labRow = rownames(matrix_temp_8),
+  heatmap_layers = theme(axis.line=element_blank()),
+  colors = plasma
+)
 
+rm(data_temp_8, matrix_temp_8)
+```
+According to the heatmap, June has the highest level of precipitation throughout the year in average in Romania. We can comment that June is the most potential rainy month in Romania.
+
+Moreover, we wanted to see the correlation between the relative columns with precipitation.
+
+```{r corr}
+library(GGally)
+ggpairs(
+  data[, c(13,14,15,16,17,18)],
+  upper = list(continuous = "density", combo = "box_no_facet"),
+  lower = list(continuous = "points", combo = "dot_no_facet")
+)
+```
 
 
 ## **4. Making sense of the Weather**
-
-<!-- Here we will show relationships between all separated elements from above -->
-
+In this part we will search about how each factor is relevant to other factors. For example how high temperature is relevant to DewPoint, etc. 
 
 ### **4.1. Surface connections**
 
-<!-- Correlation matrix between the main columns. Or between ALL of them.
-Surprising results? Maybe new chapters from there? -->
+```{r corr, fig.width = 9, fig.height = 6, message = F}
+library(PerformanceAnalytics)
+
+chart.Correlation(data[c(5,6,7,8,9,13,18)], histogram = TRUE, method = "pearson")
 
 
-### **4.2. Showcasing Weather Types by Temperature**
-
-
-### **4.3. The links between Temperature and Humidity**
-
-
-### **4.4. How powerful are Romania's storms?**
-
-<!-- Look into links between Wind and Precipitations' many columns  -->
-
-
-## **5. Conclusions**
-
-
-# **What to do with this peace of code?**
-```{r}
-small_data = data %>% group_by(Address) %>% filter(row_number() == 1)
-ggplot(small_data, aes(x=Latitude, y=Longitude)) + 
-     geom_point(color="orange",
-         fill="#69b3a2",
-         shape=21,
-         alpha=0.5,
-         size=6,
-         stroke = 2)+geom_text(
-     label=rownames(small_data), 
-     nudge_x = 0.25, nudge_y = 0.25, 
-     check_overlap = T
-   )
 ```
+The highest correlation is between temperature and DewPoint as 93% while the lowest is between Precipitation and Heatindex by 0.59%.
+
+### **4.2. The links between Temperature and Humidity**
+Temperature and Humidity are different but they are related to each other.The relation between humidity and temperature formula simply says they are inversely proportional. If temperature increases it will lead to a decrease in relative humidity, thus the air will become drier whereas when temperature decreases, the air will become wet means the relative humidity will increase.We want to show this information with their correlation matrix. According to the records of the data they have a negative correlation as -0.54.
+```{r corr_temp_humid, fig.width = 9, fig.height = 6, message = F}
+library(PerformanceAnalytics)
+chart.Correlation(data[c(5,7)], histogram = TRUE, method = "pearson")
+```
+
